@@ -1,0 +1,9 @@
+node_modules/
+dist/
+public/ocr/
+.DS_Store
+.playwright-cli/
+artifacts/
+.wrangler/
+.dev.vars*
+.env*

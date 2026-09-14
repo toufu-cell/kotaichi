@@ -1,0 +1,27 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "kotaichi",
+    "main": "worker/index.ts",
+    "compatibility_date": "2026-09-13",
+    "compatibility_flags": ["nodejs_compat"],
+    // Tesseractの環境判定用。WASMは静的importするため、このURLへは接続しない。
+    "define": { "self.location.href": "\"https://ocr.invalid/\"", "__dirname": "\"/\"" },
+    "durable_objects": {
+        "bindings": [
+            { "name": "RANK_BROWSER", "class_name": "RankBrowser" },
+            { "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }
+        ]
+    },
+    "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["RankBrowser"] },
+        { "tag": "v2", "new_sqlite_classes": ["DiscordGateway"] }
+    ],
+    "vars": { "APP_ORIGIN": "https://kotaichi.iv-scope-lab.workers.dev" },
+    "assets": {
+        "directory": "./dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+    },
+    "observability": { "enabled": false }
+}
