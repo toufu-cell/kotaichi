@@ -6,46 +6,101 @@ import { SOURCE_URL, type RankResponse } from './api.ts';
 
 const catalog: Pokemon[] = data.pokemon;
 const app = document.querySelector<HTMLDivElement>('#app')!;
-const icon = (name: 'upload' | 'shield' | 'arrow' | 'check') => ({
-    upload: '<path d="M12 16V4m-4 4 4-4 4 4M4 16v4h16v-4"/>',
-    shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/>',
-    arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
-    check: '<path d="m5 12 4 4L19 6"/>',
-}[name]);
-const svg = (name: Parameters<typeof icon>[0]) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon(name)}</svg>`;
-
 app.innerHTML = `
-    <header class="header"><a class="brand" href="/" aria-label="個体値スコープ ホーム"><img src="/icon.svg" alt="" width="34" height="34"><span>個体値スコープ<small>POKÉMON GO · IV CHECKER</small></span></a><a class="help-link" href="#about">順位について <span aria-hidden="true">↗</span></a></header>
+    <header class="header">
+        <a class="brand" href="/">
+            <img src="/icon.svg" alt="" width="28" height="28">
+            <h1>個体値スコープ</h1>
+        </a>
+        <a class="help-link" href="#about">使い方・計算条件</a>
+    </header>
     <main>
-        <section class="intro"><div><p class="eyebrow">その1匹の、可能性を見つけよう。</p><h1>スクショから、<br class="mobile-break">育てたい1匹へ。</h1><p class="lead">個体値を読み取って、リーグごとの順位をチェック。<br class="desktop-break">進化先の個体値順位も、まとめて見比べられます。</p></div><div class="privacy">${svg('shield')}<span>画像は端末の中で処理<small>画像の送信・アカウント登録は不要</small></span></div></section>
         <div class="workspace">
             <section class="scan-panel" aria-labelledby="scan-heading">
-                <div class="section-heading"><h2 id="scan-heading">評価画面を読み取る</h2><span class="step-note">画像から自動入力</span></div>
-                <label class="dropzone" id="dropzone" for="image-file"><input type="file" id="image-file" accept="image/png,image/jpeg,image/webp"><span class="upload-icon">${svg('upload')}</span><strong>スクリーンショットを選ぶ</strong><span>または、ここにドラッグ＆ドロップ</span><small>PNG / JPEG / WebP · 20MBまで</small></label>
-                <p class="upload-privacy">画像を外部に送信せず、端末内で読み取ります。</p>
-                <div class="scan-status" role="status" aria-live="polite" id="scan-status"></div><button class="text-button" id="cancel-scan" hidden>読み取りを中止</button>
-                <div class="preview" id="preview" hidden><canvas id="preview-canvas" aria-label="選択した評価画面。読み取り結果と見比べてください。"></canvas><p>読み取った個体値を、元の画像と見比べてください。</p></div>
-                <div class="appraisal-guide" id="appraisal-guide"><div class="guide-bars" aria-hidden="true"><span style="--fill:73%"></span><span style="--fill:93%"></span><span style="--fill:86%"></span></div><div><strong>3本の評価バーを写してください</strong><p>「ポケモンを調べてもらう」を開き、<br>名前と評価バーが見える画面を撮影します。</p></div></div>
-                <div class="sample-row"><span>まずは使い方を確認</span><button class="text-button" id="sample-button">入力例で試す ${svg('arrow')}</button></div>
+                <div class="section-heading">
+                    <h2 id="scan-heading">個体値を入力</h2>
+                    <button type="button" class="text-button" id="sample-button">入力例</button>
+                </div>
+                <label class="dropzone" id="dropzone" for="image-file">
+                    <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp">
+                    <strong>画像を選ぶ</strong>
+                    <span>名前と3本の評価バーが見える画像</span>
+                    <small>PNG / JPEG / WebP · 20MBまで</small>
+                </label>
+                <div class="scan-status" role="status" aria-live="polite" id="scan-status"></div>
+                <button class="text-button" id="cancel-scan" hidden>読み取りを中止</button>
+                <details class="preview" id="preview" hidden>
+                    <summary>元の画像を確認</summary>
+                    <canvas id="preview-canvas" aria-label="選択した評価画面"></canvas>
+                </details>
                 <form id="iv-form" novalidate>
-                    <div class="section-heading form-heading"><h2>読み取り内容を確認</h2><span class="step-note">手入力もできます</span></div>
-                    <label class="field-label" for="pokemon">ポケモン・フォルム</label><input type="search" id="pokemon" list="pokemon-list" placeholder="例：デルビル、マリルリ" autocomplete="off" required aria-describedby="pokemon-help"><datalist id="pokemon-list"></datalist><p id="pokemon-help" class="field-help">名前を入力して候補を選択。別フォルムは個別に選べます。</p><div id="name-candidates" class="name-candidates"></div>
-                    <div class="iv-fields">${['こうげき', 'ぼうぎょ', 'HP'].map((label, index) => `<div><label for="iv-${index}">${label}</label><div class="number-field"><input id="iv-${index}" type="number" min="0" max="15" step="1" inputmode="numeric" placeholder="—" required><span>/ 15</span></div><div class="mini-bar" id="bar-${index}" aria-hidden="true"><span></span></div></div>`).join('')}</div>
-                    <label class="field-label access-label" for="access-code">利用コード</label><input type="password" id="access-code" autocomplete="current-password" aria-describedby="access-help"><p id="access-help" class="field-help">管理者から受け取ったコードを入力してください。アカウント登録は不要です。</p>
-                    <p class="field-help">順位の取得時に、ポケモン名と個体値を送信します。画像は送信しません。</p>
-                    <div class="form-error" role="alert" id="form-error"></div><button class="primary-button" type="submit">この個体値で順位を調べる ${svg('arrow')}</button>
+                    <label class="field-label" for="pokemon">ポケモン・フォルム</label>
+                    <input type="search" id="pokemon" list="pokemon-list" placeholder="例：デルビル" autocomplete="off" required aria-describedby="pokemon-help">
+                    <datalist id="pokemon-list"></datalist>
+                    <p id="pokemon-help" class="field-help">画像の読み取り後も手入力で修正できます。</p>
+                    <div id="name-candidates" class="name-candidates"></div>
+                    <div class="iv-fields">
+                        ${['こうげき', 'ぼうぎょ', 'HP'].map((label, index) => `
+                            <div>
+                                <label for="iv-${index}">${label}</label>
+                                <div class="number-field">
+                                    <input id="iv-${index}" type="number" min="0" max="15" step="1" inputmode="numeric" placeholder="—" required>
+                                    <span>/ 15</span>
+                                </div>
+                                <div class="mini-bar" id="bar-${index}" aria-hidden="true"><span></span></div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <label class="field-label access-label" for="access-code">利用コード</label>
+                    <input type="password" id="access-code" autocomplete="current-password" aria-describedby="access-help">
+                    <p id="access-help" class="field-help">管理者から受け取ったコードを入力してください。</p>
+                    <div class="form-error" role="alert" id="form-error"></div>
+                    <button class="primary-button" type="submit">順位を調べる</button>
                 </form>
             </section>
             <section class="results-panel" aria-labelledby="results-heading">
-                <div class="section-heading"><h2 id="results-heading">PvP個体値順位</h2><a class="calculation-tag" href="${SOURCE_URL}" target="_blank" rel="noreferrer">計算に使うデータ ↗</a></div>
-                <div class="league-tabs" role="group" aria-label="リーグ">${[['1500', 'スーパー', 'CP 1,500'], ['2500', 'ハイパー', 'CP 2,500'], ['500', 'リトル', 'CP 500'], ['Infinity', 'マスター', 'CP制限なし']].map(([cap, label, sub]) => `<button type="button" data-cap="${cap}" aria-pressed="${cap === '1500'}"><strong>${label}</strong><small>${sub}</small></button>`).join('')}</div>
-                <div class="settings"><label for="max-level">育成レベル上限</label><select id="max-level"><option value="50">PL 50（アメXLあり）</option><option value="40">PL 40（アメXLなし）</option><option value="51">PL 51（最高の相棒）</option></select></div>
-                <div id="results" aria-live="polite"><div class="empty-state"><div class="rank-outline" aria-hidden="true"><span>RANK</span><strong>—<small>位</small></strong><div class="empty-bars"><i></i><i></i><i></i></div></div><h3>この1匹は、何位だろう。</h3><p>画像を選ぶか、個体値を入力すると<br>育成後の順位と進化先の比較が表示されます。</p></div></div>
-                <p class="results-note">順位は同じポケモン・フォルムの中での理論値です。<br>対戦の勝率や、ポケモン同士の強さの順位ではありません。<br>現在のCPは未判定です。CP上限を超えた個体は参加できません。</p>
+                <div class="section-heading"><h2 id="results-heading">PvP個体値順位</h2></div>
+                <div class="league-tabs" role="group" aria-label="リーグ">
+                    ${[['1500', 'スーパー', 'CP 1,500'], ['2500', 'ハイパー', 'CP 2,500'], ['500', 'リトル', 'CP 500'], ['Infinity', 'マスター', 'CP制限なし']].map(([cap, label, sub]) => `
+                        <button type="button" data-cap="${cap}" aria-pressed="${cap === '1500'}">
+                            <strong>${label}</strong><small>${sub}</small>
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="settings">
+                    <label for="max-level">育成レベル上限</label>
+                    <select id="max-level">
+                        <option value="50">PL50</option>
+                        <option value="40">PL40</option>
+                        <option value="51">PL51（最高の相棒）</option>
+                    </select>
+                </div>
+                <div id="results" aria-live="polite">
+                    <p class="empty-state">個体値を入力して「順位を調べる」を押してください。</p>
+                </div>
+                <p class="results-note">同じポケモン・フォルムの個体値を比較した順位です。</p>
             </section>
         </div>
-        <section class="about" id="about"><h2>順位の見方</h2><div class="about-content"><div><h3>個体値100%が、いつも1位とは限らない。</h3><p>CP制限のある対戦では、こうげきが低い個体ほどレベルを上げられることがあります。本アプリで能力値の積を計算し、リーグごとの個体値順位を表示します。</p></div><div><details><summary>計算条件と対応範囲</summary><p>個体値0〜15の全4,096通りを、こうげき・ぼうぎょ・HPの積で比較します。同率は同順位です。育成レベル上限は40・50・51です。CP制限内で育成できる最大レベルの順位・CPを表示します。</p><p>現在のCP・レベルは判定しません。すでにCP上限を超えた個体は、そのリーグでは使えません。技、シャドウ補正、限定カップの参加条件は判定しません。進化候補の性別・地域・イベントなどの条件は確認が必要です。</p><p>日本語の評価画面に対応します。ニックネームや画面デザインの違いで読めない場合は手入力してください。画像は保存・送信しません。計算結果は最大24時間再利用します。</p></details><details><summary>データと出典</summary><p id="data-info"></p><p>種族値・進化候補・レベル補正：<a href="${SOURCE_URL}" target="_blank" rel="noreferrer">PvPoke</a>（<a href="/licenses/pvpoke.txt">MIT</a>）<br>日本語名：<a href="https://pokeapi.co/" target="_blank" rel="noreferrer">PokéAPI</a>（<a href="/licenses/pokeapi.txt">ライセンス</a>）<br>文字認識：<a href="https://github.com/naptha/tesseract.js" target="_blank" rel="noreferrer">Tesseract.js</a></p></details></div></div></section>
-    </main><footer><span>個体値スコープ</span><p>Pokémon GOの非公式ファンツールです。<br>Pokémonおよび関連名称は各権利者に帰属します。</p></footer>`;
+        <section class="about" id="about" aria-label="使い方と計算条件">
+            <details>
+                <summary>使い方・計算条件</summary>
+                <p>日本語の評価画像を選ぶか、ポケモン名と個体値を手入力します。読み取った名前と数値は元の画像と見比べてください。</p>
+                <p>全4,096通りの個体値を、こうげき・ぼうぎょ・HPの積で比較します。同率は同順位です。</p>
+                <p>CP制限と育成レベル上限の範囲で育成したときの順位・CPを表示します。進化先も候補として比較できます。</p>
+                <p>対戦への参加条件や、性別・地域・イベントなどの進化条件はゲーム内で確認してください。</p>
+                <p>画像は端末内で解析します。順位の計算時にポケモンの識別子と個体値を送信します。</p>
+            </details>
+            <details>
+                <summary>データ・ライセンス</summary>
+                <p id="data-info"></p>
+                <p>種族値・進化候補・レベル補正：<a href="${SOURCE_URL}" target="_blank" rel="noreferrer">PvPoke</a>（<a href="/licenses/pvpoke.txt">MIT</a>）</p>
+                <p>日本語名：<a href="https://pokeapi.co/" target="_blank" rel="noreferrer">PokéAPI</a>（<a href="/licenses/pokeapi.txt">ライセンス</a>）</p>
+                <p>文字認識：<a href="https://github.com/naptha/tesseract.js" target="_blank" rel="noreferrer">Tesseract.js</a></p>
+            </details>
+        </section>
+    </main>
+    <footer><p>Pokémon GOの非公式ファンツールです。Pokémonおよび関連名称は各権利者に帰属します。</p></footer>
+`;
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const pokemonInput = $<HTMLInputElement>('#pokemon');
@@ -121,9 +176,10 @@ function renderResults() {
         cardTop.append(identity);
         card.append(cardTop);
         const details = document.createElement('div');
+        details.className = 'result-body';
         details.innerHTML = '<div class="rank-line"><div class="rank"><strong></strong><span>位</span></div></div><dl class="result-stats"></dl>';
         details.querySelector('.rank strong')!.textContent = entry.rank.toLocaleString();
-        for (const [label, value] of [['育成後CP', entry.cp], ['ポケモンレベル', entry.level], ['SCP', entry.scp]] as const) {
+        for (const [label, value] of [['育成後CP', entry.cp], ['育成PL', entry.level], ['SCP', entry.scp]] as const) {
             if (label === 'SCP' && value === null) continue;
             const group = document.createElement('div');
             const term = document.createElement('dt');
@@ -227,7 +283,6 @@ async function processFile(file: File) {
     ivInputs.forEach(input => { input.value = ''; });
     $('#name-candidates').replaceChildren();
     $('#preview').hidden = true;
-    $('#appraisal-guide').hidden = false;
     invalidate();
     setStatus('画像を開いています…');
     try {
@@ -238,7 +293,6 @@ async function processFile(file: File) {
         preview.height = canvas.height;
         preview.getContext('2d')!.drawImage(canvas, 0, 0);
         $('#preview').hidden = false;
-        $('#appraisal-guide').hidden = true;
         const result = await scanImage(canvas, catalog, message => setStatus(message), scanController.signal);
         if (scanController.signal.aborted) return;
         if (result.detection) result.detection.ivs.forEach((value, index) => { ivInputs[index].value = String(value); });
@@ -259,7 +313,7 @@ async function processFile(file: File) {
         if (!result.detection) messages.push('評価バーを読み取れませんでした。個体値を手入力してください。');
         if (!result.candidates.length) messages.push(result.nameError || '名前を特定できませんでした。候補から選んでください。');
         if (messages.length) setStatus(messages.join(' '), true);
-        else setStatus('読み取りが終わりました。画像と数値を確認して、順位を調べてください。');
+        else setStatus('読み取り完了。元の画像と名前・個体値を確認してください。');
     } catch (error) {
         setStatus((error as Error).message || '画像を開けませんでした。別の画像を選んでください。', true);
     } finally {
@@ -287,8 +341,7 @@ $('#sample-button').addEventListener('click', () => {
     [8, 3, 11].forEach((value, index) => { ivInputs[index].value = String(value); });
     $('#name-candidates').replaceChildren();
     $('#preview').hidden = true;
-    $('#appraisal-guide').hidden = false;
     invalidate();
-    setStatus('入力例：デルビルの8 / 3 / 11を入力しました。順位を調べてみましょう。');
+    setStatus('デルビルの個体値8 / 3 / 11を入力しました。');
     pokemonInput.focus();
 });
