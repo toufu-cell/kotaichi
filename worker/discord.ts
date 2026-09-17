@@ -1,5 +1,5 @@
 import data from '../src/data/pokemon.json' with { type: 'json' };
-import { SOURCE_URL, type RankResponse } from '../src/api.ts';
+import type { RankCardData } from '../src/discord-card.ts';
 import { validateIVs, type IVs } from '../src/ranking.ts';
 
 export interface DiscordImage {
@@ -87,38 +87,6 @@ export async function downloadImage(input: DiscordImage, fetcher: typeof fetch =
     throw new DiscordInputError('Discordから画像を取得できませんでした。通信の失敗が続いています。時間をおいて画像を添付し直してください。');
 }
 
-export function formatRanks(result: RankResponse, candidateIds = [result.request.pokemonId]) {
-    const pokemon = data.pokemon.find(p => p.id === result.request.pokemonId)!;
-    const candidateNames = data.pokemon.filter(p => candidateIds.includes(p.id)).map(p => p.label);
-    const ambiguous = candidateNames.length > 1;
-    const lines = [`${ambiguous ? `${pokemon.name}（フォルム未確定）` : pokemon.label}｜${result.request.ivs.join(' / ')}`];
-    if (ambiguous) lines.push('名前が同じフォルムを候補として表示しています。画像のフォルムと見比べてください。');
-    lines.push('PL50上限・全4,096通りの能力値の積で計算（同率は同順位）');
-    const names = [...new Set(result.rows.filter(row => row.maxLevel === 50).map(row => row.name))];
-    const isTop30 = (rank: number) => rank >= 1 && rank <= 30;
-    const priority = (name: string) => candidateNames.includes(name) ? 0
-        : result.rows.some(row => row.name === name && row.maxLevel === 50 && isTop30(row.rank)) ? 1
-        : /^(メガ|ゲンシ)/.test(name) ? 3 : 2;
-    names.sort((a, b) => priority(a) - priority(b));
-    for (const name of names) {
-        const rows = result.rows.filter(row => row.name === name && row.maxLevel === 50);
-        const suffix = candidateNames.includes(name) ? (ambiguous ? '（フォルム候補）' : '') : '（進化候補）';
-        const section = ['', `${name}${suffix}`];
-        for (const cap of [1500, 2500, 500, null]) {
-            const row = rows.find(row => row.cap === cap);
-            if (!row) continue;
-            const league = cap === 1500 ? 'スーパー' : cap === 2500 ? 'ハイパー' : cap === 500 ? 'リトル' : 'マスター';
-            const rank = `${league}：${row.rank.toLocaleString('ja-JP')}位`;
-            section.push(`${isTop30(row.rank) ? `⭐ **${rank}**` : rank} / CP${row.cp} / PL${row.level}`);
-        }
-        if ([...lines, ...section].join('\n').length > 1650) { lines.push('一部の候補を省略しました。候補名と個体値を本文に指定すると計算できます。'); break; }
-        lines.push(...section);
-    }
-    lines.push('', '読み取った名前・個体値を画像と確認してください。現在のCPによる参加可否は判定しません。',
-        '性別・地域・イベントなどの進化条件は判定しません。', `計算用データ：PvPoke ${SOURCE_URL}`);
-    return lines.join('\n');
-}
-
 export class DiscordError extends Error {
     status: number;
     retryAfter: number;
@@ -130,20 +98,46 @@ export class DiscordError extends Error {
 }
 
 export async function discordRequest(path: string, token: string, init: RequestInit = {}, fetcher: typeof fetch = fetch) {
+    const headers = new Headers(init.headers);
+    headers.set('Authorization', `Bot ${token}`);
+    if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
     const response = await fetcher(`https://discord.com/api/v10${path}`, {
         ...init, redirect: 'manual', signal: AbortSignal.timeout(15000),
-        headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json', ...init.headers },
+        headers,
     });
     const body: any = await response.json().catch(() => ({}));
     if (!response.ok) throw new DiscordError(response.status, response.status === 429 ? Math.max(1, Number(body.retry_after) || 60) : 0);
     return body;
 }
 
-export function replyPayload(image: Pick<DiscordImage, 'id' | 'position' | 'total'>, content: string) {
+export function replyPayload(
+    image: Pick<DiscordImage, 'id' | 'position' | 'total'>,
+    content: string,
+    attachment?: { filename: string; description: string },
+) {
     const prefix = image.total && image.total > 1 ? `${image.position}枚目／全${image.total}枚\n` : '';
     return {
         content: prefix + content.slice(0, 2000 - prefix.length), allowed_mentions: { parse: [], replied_user: false },
         message_reference: { message_id: image.id, fail_if_not_exists: false },
         nonce: image.position && image.position > 1 ? `${image.id}-${image.position}` : image.id, enforce_nonce: true,
+        ...(attachment ? { attachments: [{ id: 0, ...attachment }] } : {}),
     };
+}
+
+export function rankAttachment(
+    card: RankCardData,
+    image: Pick<DiscordImage, 'id' | 'position' | 'total'>,
+    content: string,
+    png: Uint8Array,
+) {
+    const sequence = image.total && image.total > 1 ? `-${image.position}` : '';
+    const filename = `pokemon-go-ranks${sequence}.png`;
+    const number = image.total && image.total > 1 ? `${image.position}枚目／全${image.total}枚。` : '';
+    const description = `${number}${card.title}｜個体値 ${card.ivs.join(' / ')}。PL50の順位表。`;
+    const form = new FormData();
+    form.append('payload_json', JSON.stringify(replyPayload(image, content, { filename, description })));
+    form.append('files[0]', new Blob([new Uint8Array(png).buffer], { type: 'image/png' }), filename);
+    return { form, filename, description };
 }

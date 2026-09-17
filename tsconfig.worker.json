@@ -3,5 +3,5 @@
     "compilerOptions": {
         "types": ["node"]
     },
-    "include": ["worker", "src/api.ts", "src/ranking.ts"]
+    "include": ["worker", "src/api.ts", "src/ranking.ts", "src/discord-card.ts", "scripts/rank-image-smoke-worker.ts"]
 }

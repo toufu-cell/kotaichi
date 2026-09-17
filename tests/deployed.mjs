@@ -26,7 +26,7 @@ try {
         assert.ok(Object.hasOwn(status, key), key);
     }
 
-    for (const path of ['/', '/index.html', '/ocr/jpn.traineddata.gz', '/api/rank', '/internal/discord-image', '/api/bot/start/']) {
+    for (const path of ['/', '/index.html', '/ocr/jpn.traineddata.gz', '/fonts/BIZUDPGothic-Regular.ttf', '/internal/discord-image', '/internal/discord-rank-image', '/api/rank', '/api/bot/start/']) {
         const response = await fetch(new URL(path, baseURL), {
             method: path === '/internal/discord-image' ? 'POST' : 'GET',
             headers,

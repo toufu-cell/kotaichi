@@ -9,6 +9,8 @@ import { discordImageResult } from '../worker/discord-browser.ts';
 import { DiscordInputError } from '../worker/discord.ts';
 import { calculateRanks } from '../worker/local-ranks.ts';
 
+const manualCaption = (name: string, ivs: string) => `${name} ${ivs}`;
+
 test('Browserless OCR reads images, rejects uncertain input and recovers before starting lookup', async () => {
     const browser = await chromium.launch();
     let fixtures: Record<string, Buffer>;
@@ -64,7 +66,7 @@ test('Browserless OCR reads images, rejects uncertain input and recovers before 
     const signal = new AbortController().signal;
     const lookup = async () => { assert.fail('Failed recognition must not start a browser lookup.'); };
     try {
-        assert.deepEqual(await scan({ ...image, caption: 'デルビル 8/3/11' }, signal), expected);
+        assert.deepEqual(await scan({ ...image, caption: manualCaption('デルビル', '8/3/11') }, signal), expected);
         assert.equal(modelAttempts, 0);
         await assert.rejects(discordImageResult(image, input => scan(input, signal), lookup), error => error instanceof DiscordInputError && /ポケモン名、空白/.test(error.message));
         assert.deepEqual(await scan(image, signal), expected);
@@ -75,14 +77,14 @@ test('Browserless OCR reads images, rejects uncertain input and recovers before 
         assert.deepEqual(jobs, [expected, expected]);
         bytes = fixtures['ロコン-png'];
         const forms = await discordImageResult(image, input => scan(input, signal), async input => calculateRanks(input));
-        assert.match(forms, /^ロコン（フォルム未確定）｜8 \/ 3 \/ 11/);
-        for (const name of ['ロコン', 'ロコン（アローラ）']) assert.ok(forms.includes(`${name}（フォルム候補）`));
-        for (const name of ['キュウコン', 'キュウコン（アローラ）']) assert.ok(forms.includes(`${name}（進化候補）`));
-        assert.ok(forms.indexOf('ロコン（アローラ）（フォルム候補）') < forms.indexOf('キュウコン（進化候補）'));
-        assert.ok(forms.length <= 2000);
-        const selected = await discordImageResult({ ...image, caption: 'ロコン（アローラ） 8/3/11' }, input => scan(input, signal), async input => calculateRanks(input));
-        assert.match(selected, /^ロコン（アローラ）｜/);
-        assert.doesNotMatch(selected, /フォルム未確定|キュウコン（進化候補）/);
+        assert.match(forms.content, /^ロコン（フォルム未確定）｜個体値 8 \/ 3 \/ 11/);
+        for (const name of ['ロコン', 'ロコン（アローラ）']) assert.ok(forms.card.rows.some(row => row.name === name && row.role === 'フォルム候補'));
+        for (const name of ['キュウコン', 'キュウコン（アローラ）']) assert.ok(forms.card.rows.some(row => row.name === name && row.role === '進化候補'));
+        assert.deepEqual(forms.card.rows.map(row => row.name), ['ロコン', 'ロコン（アローラ）', 'キュウコン', 'キュウコン（アローラ）']);
+        const selected = await discordImageResult({ ...image, caption: manualCaption('ロコン（アローラ）', '8/3/11') }, input => scan(input, signal), async input => calculateRanks(input));
+        assert.match(selected.content, /^ロコン（アローラ）｜/);
+        assert.doesNotMatch(selected.content, /フォルム未確定/);
+        assert.deepEqual(selected.card.rows.map(row => row.name), ['ロコン（アローラ）', 'キュウコン（アローラ）']);
         await assert.rejects(discordImageResult(image, input => scan(input, signal, 0), lookup), DiscordInputError);
         await assert.rejects(discordImageResult(image, input => scan(input, AbortSignal.abort()), lookup), DiscordInputError);
         let entered!: () => void;

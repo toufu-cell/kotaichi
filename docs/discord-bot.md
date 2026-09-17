@@ -4,7 +4,7 @@
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)でApplicationを作成します。
 2. Bot設定でMessage Content Intentを有効にし、Botトークンを発行します。
-3. OAuth2 URL Generatorで`bot`を選び、View Channels・Send Messages・Read Message Historyを付けてサーバーへ招待します。
+3. OAuth2 URL Generatorで`bot`を選びます。View Channels・Send Messages・Attach Files・Read Message Historyを付けてサーバーへ招待します。
 4. 専用テキストチャンネルでBotの閲覧と返信を許可し、Discordの開発者モードでチャンネルIDをコピーします。
 
 Botトークンと管理用パスワードは、チャットやリポジトリへ記録せず、Wranglerの入力欄へ直接入力してください。
@@ -29,7 +29,7 @@ Durable Objectのbindingとinstanceは次の組み合わせです。
 | `RANK_BROWSER` | `RankBrowser` | `rank` |
 | `DISCORD_GATEWAY` | `DiscordGateway` | `discord` |
 
-`ASSETS`には日本語OCRモデルだけを配置します。公開WorkerがGatewayへ渡すパスは、`/api/bot/start`、`/api/bot/stop`、`/api/bot/status`の3つです。
+`ASSETS`には日本語OCRモデル、順位画像用のBIZ UDPGothic、フォントライセンスを配置します。公開WorkerがGatewayへ渡すパスは、`/api/bot/start`、`/api/bot/stop`、`/api/bot/status`の3つです。内部の画像処理パスと`ASSETS`は公開Workerから取得できません。
 
 ## 管理CLI
 
@@ -64,11 +64,13 @@ npm run bot -- stop
 
 ポケモン名と3本の評価バーが見えるPNG・JPEG・WebPを専用チャンネルへ投稿します。画像は1枚あたり8MB、800万画素までです。幅250ピクセル以上、高さ400ピクセル以上の画像を使用します。
 
-複数画像は添付順に処理され、画像ごとに番号付きの返信が返ります。
+複数画像は添付順に処理され、画像1枚ごとに番号付きの順位表が返ります。
 1枚だけ添付した投稿では、本文のポケモン名と個体値を半角スペースで区切ると、その内容で計算します。
 個体値はこうげき・ぼうぎょ・HPの順に、`1/4/15`のように指定します。
 
-返信にはPL50上限の4リーグ、進化先、フォルム候補が含まれます。上位1〜30位は星と太字で強調されます。読み取った名前と個体値を投稿した画像と見比べてください。
+通常の返信は、読み取った名前と個体値を示す短い本文と、順位表のPNGです。PNGにはPL50上限の4リーグ、本人、進化先、同名フォルム候補を載せます。上位1〜30位は星と背景色で強調されます。読み取った名前と個体値を投稿した画像と見比べてください。
+
+Attach Files権限のエラーが表示された場合は、Botに同権限があるか確認してください。画像の読み取りや順位の取得に失敗した返信は、案内に従って再投稿してください。同じ投稿の次の画像は引き続き処理されます。
 
 待ち行列は処理中を含めて20枚までです。送信結果を確定できなかった返信は、自動再送による重複を避けるため`uncertainReplies`へ計上されます。該当する画像は再投稿してください。
 
@@ -78,6 +80,7 @@ npm run bot -- stop
 npm run build
 npm test
 npm run deploy:check
+npm run artifacts:rank-images
 npm run test:discord-source -- /absolute/path/to/purrloin-appraisal.png purrloin
 ```
 
@@ -94,6 +97,6 @@ npm run test:deployed
 
 ## データとライセンス
 
-順位計算には[PvPoke](https://github.com/pvpoke/pvpoke)のデータ、日本語名には[PokéAPI](https://pokeapi.co/)のデータを使います。各データのライセンスは[public/licenses](../public/licenses/)に収録しています。
+順位計算には[PvPoke](https://github.com/pvpoke/pvpoke)のデータ、日本語名には[PokéAPI](https://pokeapi.co/)のデータ、順位画像にはBIZ UDPGothicを使います。ライセンスと帰属表示は[public/licenses](../public/licenses/)に収録しています。
 
 ポケモンGOの非公式ファンツールです。Pokémonおよび関連名称は各権利者に帰属します。

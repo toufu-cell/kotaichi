@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { imagesFromMessage, manualInput, attachmentURL, downloadImage, replyPayload, formatRanks, MAX_IMAGE_BYTES, DiscordInputError } from '../worker/discord.ts';
+import { imagesFromMessage, manualInput, attachmentURL, downloadImage, replyPayload, rankAttachment, discordRequest, MAX_IMAGE_BYTES, DiscordInputError } from '../worker/discord.ts';
+import { buildDiscordRankResult } from '../src/discord-card.ts';
 import { sampleResult } from './rank-fixture.mjs';
 
 const channel = '123456789012345678';
+const manualCaption = (name: string, ivs: string) => `${name} ${ivs}`;
 const message = {
     id: '223456789012345678', channel_id: channel, author: { id: '323456789012345678' }, content: '',
     attachments: [{ url: `https://cdn.discordapp.com/attachments/${channel}/423456789012345678/image.png`, content_type: 'image/png', size: 100 }],
@@ -78,25 +80,50 @@ test('Image download retries transient failures once and discards incomplete res
 });
 
 test('Discord captions correct OCR values and reply text never sends mentions', () => {
-    assert.deepEqual(manualInput('デルビル 8/3/11'), { pokemonId: 'houndour', ivs: [8, 3, 11] });
+    assert.deepEqual(manualInput(manualCaption('デルビル', '8/3/11')), { pokemonId: 'houndour', ivs: [8, 3, 11] });
     assert.equal(manualInput(''), null);
-    assert.throws(() => manualInput('デルビル 16/3/11'));
-    assert.throws(() => manualInput('存在しない名前 8/3/11'));
-    const payload = replyPayload(message, formatRanks(sampleResult()));
+    assert.throws(() => manualInput(manualCaption('デルビル', '16/3/11')));
+    assert.throws(() => manualInput(manualCaption('存在しない名前', '8/3/11')));
+    const result = buildDiscordRankResult(sampleResult());
+    const payload = replyPayload(message, result.content);
     assert.deepEqual(payload.allowed_mentions, { parse: [], replied_user: false });
     assert.equal(payload.message_reference.message_id, message.id);
     assert.equal(payload.nonce, message.id);
     assert.equal(payload.enforce_nonce, true);
-    assert.match(payload.content, /1,654位/);
-    assert.match(payload.content, /PL50/);
-    assert.ok(payload.content.includes('計算用データ：PvPoke https://github.com/pvpoke/pvpoke'));
-    assert.match(payload.content, /ヘルガー（進化候補）/);
-    assert.match(payload.content, /同率は同順位/);
+    assert.match(payload.content, /デルビル｜個体値 8 \/ 3 \/ 11/);
+    assert.match(payload.content, /順位表を添付しました/);
+    assert.ok(payload.content.length < 100);
     assert.ok(payload.content.length <= 2000);
 });
 
+test('Discord multipart requests carry the PNG and matching attachment metadata', async () => {
+    const result = buildDiscordRankResult(sampleResult());
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const attachment = rankAttachment(result.card, message, result.content, png);
+    let parsed: FormData | undefined;
+    await discordRequest('/channels/123/messages', 'token', { method: 'POST', body: attachment.form }, async (url, init) => {
+        const request = new Request(url, init);
+        assert.match(request.headers.get('Content-Type') ?? '', /^multipart\/form-data; boundary=/);
+        assert.equal(request.headers.get('Authorization'), 'Bot token');
+        parsed = await request.formData();
+        return Response.json({ id: 'reply' });
+    });
+    const payload = JSON.parse(String(parsed!.get('payload_json')));
+    const file = parsed!.get('files[0]');
+    assert.ok(file instanceof File);
+    assert.equal(file.name, attachment.filename);
+    assert.equal(file.type, 'image/png');
+    assert.deepEqual(new Uint8Array(await file.arrayBuffer()), png);
+    assert.deepEqual(payload.attachments, [{ id: 0, filename: attachment.filename, description: attachment.description }]);
+    assert.equal(payload.content, result.content);
+    assert.equal(payload.nonce, message.id);
+    assert.equal(payload.enforce_nonce, true);
+    assert.deepEqual(payload.allowed_mentions, { parse: [], replied_user: false });
+    assert.equal(payload.message_reference.message_id, message.id);
+});
+
 test('Multiple images retain order and get numbered replies with distinct nonces', () => {
-    const caption = 'デルビル 8/3/11';
+    const caption = manualCaption('デルビル', '8/3/11');
     assert.equal(imagesFromMessage({ ...message, content: caption }, channel)[0].caption, caption);
     const attachments = Array.from({ length: 20 }, (_, i) => ({
         ...message.attachments[0], url: `https://cdn.discordapp.com/attachments/1/2/${i}.png`,
@@ -118,14 +145,15 @@ test('Multiple images retain order and get numbered replies with distinct nonces
     }
 });
 
-test('Only PL50 ranks from 1 through 30 are highlighted, including evolutions', () => {
+test('Structured rank results preserve boundary ranks for the source and evolutions', () => {
     const result = sampleResult();
     for (const row of result.rows) {
         row.rank = row.maxLevel === 50 ? (row.cap === 500 ? 1 : row.cap === 1500 ? 30 : 31) : 2;
     }
-    const reply = formatRanks(result);
-    assert.equal(reply.match(/⭐ \*\*スーパー：30位\*\*/g)?.length, 2);
-    assert.equal(reply.match(/⭐ \*\*リトル：1位\*\*/g)?.length, 2);
-    assert.match(reply, /ハイパー：31位/);
-    assert.doesNotMatch(reply, /\*\*[^\n]*31位|2位|PL40|PL51/);
+    const card = buildDiscordRankResult(result).card;
+    assert.deepEqual(card.rows.map(row => row.leagues.map(cell => cell.rank)), [
+        [30, 31, 1, 31],
+        [30, 31, 1, 31],
+    ]);
+    assert.deepEqual(card.rows.map(row => row.role), ['本人', '進化候補']);
 });

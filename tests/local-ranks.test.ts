@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateRanks } from '../worker/local-ranks.ts';
-import { formatRanks } from '../worker/discord.ts';
+import { buildDiscordRankResult } from '../src/discord-card.ts';
 
 test('Local ranks return PL50 by default and independently calculate each league and evolution', () => {
     const result = calculateRanks({ pokemonId: 'houndour', ivs: [8, 3, 11] });
@@ -20,14 +20,18 @@ test('Local ranks return PL50 by default and independently calculate each league
     assert.throws(() => calculateRanks({ pokemonId: 'houndour', ivs: [16, 0, 0] }));
 });
 
-test('Branch evolutions fit in a Discord reply and are explicitly conditional candidates', () => {
+test('Branch evolutions are all retained as explicit candidates', () => {
     const result = calculateRanks({ pokemonId: 'eevee', ivs: [0, 15, 15] });
     assert.equal(result.rows.length, 36);
-    const reply = formatRanks(result);
-    assert.ok(reply.length <= 2000);
+    for (const row of result.rows) row.rank = row.sourceId === 'sylveon' ? 30 : 31;
+    const reply = buildDiscordRankResult(result);
+    assert.equal(reply.card.rows.length, 9);
     for (const name of ['シャワーズ', 'サンダース', 'ブースター', 'エーフィ', 'ブラッキー', 'リーフィア', 'グレイシア', 'ニンフィア']) {
-        assert.ok(reply.includes(`${name}（進化候補）`));
+        assert.ok(reply.card.rows.some(row => row.name === name && row.role === '進化候補'));
     }
-    assert.match(reply, /進化条件は判定しません/);
-    assert.doesNotMatch(reply, /GameWith|PL51|PL40/);
+    assert.deepEqual(reply.card.rows.map(row => row.name), [
+        'イーブイ', 'ニンフィア', 'シャワーズ', 'サンダース', 'ブースター',
+        'エーフィ', 'ブラッキー', 'リーフィア', 'グレイシア',
+    ]);
+    assert.ok(reply.content.length < 100);
 });

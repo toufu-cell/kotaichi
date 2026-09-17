@@ -1,9 +1,13 @@
 import { GatewayConnection, type GatewaySession, type GatewayEvent } from './gateway-connection.ts';
-import { discordRequest, DiscordError, imagesFromMessage, replyPayload, SNOWFLAKE, type DiscordImage } from './discord.ts';
+import {
+    discordRequest, DiscordError, imagesFromMessage, rankAttachment, replyPayload, SNOWFLAKE,
+    MAX_IMAGE_BYTES, type DiscordImage,
+} from './discord.ts';
+import type { RankCardData } from '../src/discord-card.ts';
 import { authorized } from './auth.ts';
 import type { Env } from './index.ts';
 
-interface Job { image: DiscordImage; content?: string; sendingAt?: number; }
+interface Job { image: DiscordImage; content?: string; card?: RankCardData; sendingAt?: number; }
 interface BotState {
     enabled: boolean;
     channelId: string;
@@ -210,29 +214,76 @@ export class DiscordGateway {
         await this.ctx.storage.deleteAlarm();
     }
 
-    private async sendReply(image: DiscordImage, content: string, job?: Job) {
+    private async rateLimited(job: Job | undefined, error: DiscordError) {
+        if (job) job.sendingAt = undefined;
+        this.state.nextSendAt = Date.now() + error.retryAfter * 1000;
+        await this.save();
+        await this.ctx.storage.setAlarm(this.state.nextSendAt);
+    }
+
+    private async permissionFailure(job?: Job) {
+        if (job) job.sendingAt = undefined;
+        await this.halt('Discordへ返信する権限を確認してください。');
+    }
+
+    private attachmentPermissionMessage(card: RankCardData) {
+        return `${card.title}｜個体値 ${card.ivs.join(' / ')}\n順位画像を添付できませんでした。管理者はBotのAttach Files権限を確認してください。`;
+    }
+
+    private async sendReply(image: DiscordImage, content: string, job?: Job, png?: Uint8Array) {
         if (this.sending || !this.state.enabled || Date.now() < this.state.nextSendAt) return false;
         this.sending = true;
         try {
+            const body = png && job?.card
+                ? rankAttachment(job.card, image, content, png).form
+                : JSON.stringify(replyPayload(image, content));
             await discordRequest(`/channels/${this.state.channelId}/messages`, this.env.DISCORD_BOT_TOKEN!, {
-                method: 'POST', body: JSON.stringify(replyPayload(image, content)),
+                method: 'POST', body,
             });
             return true;
         } catch (error) {
             if (error instanceof DiscordError && error.status === 429) {
-                if (job) job.sendingAt = undefined;
-                this.state.nextSendAt = Date.now() + error.retryAfter * 1000;
-                await this.save();
-                await this.ctx.storage.setAlarm(this.state.nextSendAt);
+                await this.rateLimited(job, error);
                 return false;
             }
+            if (error instanceof DiscordError && error.status === 403 && png && job?.card) {
+                try {
+                    await discordRequest(`/channels/${this.state.channelId}/messages`, this.env.DISCORD_BOT_TOKEN!, {
+                        method: 'POST', body: JSON.stringify(replyPayload(image, this.attachmentPermissionMessage(job.card))),
+                    });
+                    return true;
+                } catch (fallbackError) {
+                    if (fallbackError instanceof DiscordError && fallbackError.status === 429) {
+                        await this.rateLimited(job, fallbackError);
+                        return false;
+                    }
+                    if (fallbackError instanceof DiscordError && [401, 403].includes(fallbackError.status)) {
+                        await this.permissionFailure(job);
+                        return false;
+                    }
+                    throw fallbackError;
+                }
+            }
             if (error instanceof DiscordError && [401, 403].includes(error.status)) {
-                if (job) job.sendingAt = undefined;
-                await this.halt('Discordへ返信する権限を確認してください。');
+                await this.permissionFailure(job);
                 return false;
             }
             throw error;
         } finally { this.sending = false; }
+    }
+
+    private async rankPng(card: RankCardData) {
+        const response = await this.env.RANK_BROWSER.getByName('rank').fetch(new Request('https://internal/internal/discord-rank-image', {
+            method: 'POST', body: JSON.stringify({ channelId: this.state.channelId, card }),
+            headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(30000),
+        }));
+        if (!response.ok || response.headers.get('Content-Type') !== 'image/png') throw new Error('Rank image unavailable.');
+        const png = new Uint8Array(await response.arrayBuffer());
+        if (png.length < 8 || png.length > MAX_IMAGE_BYTES
+            || ![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => png[index] === byte)) {
+            throw new Error('Invalid rank image.');
+        }
+        return png;
     }
 
     private async drain() {
@@ -256,16 +307,27 @@ export class DiscordGateway {
                             signal: AbortSignal.timeout(120000),
                         }));
                         if (!response.ok) throw new Error();
-                        const result = await response.json() as { content: string };
+                        const result = await response.json() as { content: string; card?: RankCardData };
+                        if (typeof result.content !== 'string' || !result.content) throw new Error();
                         job.content = result.content;
+                        job.card = result.card;
                     } catch { job.content = '画像か順位を取得できませんでした。無料枠の上限や混雑の可能性があります。時間をおいて再投稿してください。'; }
                     await this.save();
+                }
+                if (!this.state.enabled) break;
+                let png: Uint8Array | undefined;
+                let content = job.content;
+                if (job.card) {
+                    try { png = await this.rankPng(job.card); }
+                    catch {
+                        content = `${job.card.title}｜個体値 ${job.card.ivs.join(' / ')}\n順位画像を作成できませんでした。時間をおいて再投稿してください。`;
+                    }
                 }
                 if (!this.state.enabled) break;
                 job.sendingAt = Date.now();
                 await this.save();
                 try {
-                    if (!await this.sendReply(job.image, job.content, job)) {
+                    if (!await this.sendReply(job.image, content, job, png)) {
                         job.sendingAt = undefined;
                         await this.save();
                         break;

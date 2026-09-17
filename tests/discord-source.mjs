@@ -18,12 +18,16 @@ try {
         id: '323456789012345678', channelId: '123456789012345678', url, size: bytes.length, mime: 'image/png', caption: '',
     }, image => scan(image, new AbortController().signal), async input => calculateRanks(input));
     if (process.argv[3] === 'purrloin') {
-        assert.match(reply, /チョロネコ｜1 \/ 4 \/ 15/);
-        assert.match(reply, /スーパー：457位 \/ CP1498/);
+        assert.match(reply.content, /チョロネコ｜個体値 1 \/ 4 \/ 15/);
+        const liepard = reply.card.rows.find(row => row.name === 'レパルダス');
+        assert.ok(liepard);
+        assert.deepEqual(liepard.leagues[0], { rank: 457, cp: 1498, level: 34 });
     } else {
-        assert.match(reply, /デルビル｜8 \/ 3 \/ 11/);
-        assert.match(reply, /スーパー：1,654位 \/ CP1495/);
+        assert.match(reply.content, /デルビル｜個体値 8 \/ 3 \/ 11/);
+        const houndoom = reply.card.rows.find(row => row.name === 'ヘルガー');
+        assert.ok(houndoom);
+        assert.deepEqual(houndoom.leagues[0], { rank: 1654, cp: 1495, level: 21.5 });
     }
-    assert.ok(reply.length <= 2000);
-    console.log(reply);
+    assert.ok(reply.content.length < 100);
+    console.log(reply.content);
 } finally { globalThis.fetch = originalFetch; }

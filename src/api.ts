@@ -23,5 +23,3 @@ export interface RankResponse {
     fetchedAt: string;
     rows: RemoteRank[];
 }
-
-export const SOURCE_URL = 'https://github.com/pvpoke/pvpoke';
