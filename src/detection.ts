@@ -93,6 +93,12 @@ function normalize(text: string) {
     return text.normalize('NFKC').toLowerCase().replace(/[\u3041-\u3096]/g, char => String.fromCharCode(char.charCodeAt(0) + 0x60)).replace(/[^\p{L}\p{N}♀♂ー]/gu, '');
 }
 
+function expandSmallKana(text: string) {
+    const small = 'ァィゥェォッャュョヮヵヶ';
+    const large = 'アイウエオツヤユヨワカケ';
+    return text.replace(/[ァィゥェォッャュョヮヵヶ]/g, char => large[small.indexOf(char)]);
+}
+
 export function matchNames(text: string, catalog: Pokemon[]): Pokemon[] {
     const normalized = normalize(text);
     if (!normalized) return [];
@@ -100,6 +106,10 @@ export function matchNames(text: string, catalog: Pokemon[]): Pokemon[] {
     if (!matches.length) {
         const withoutVoicing = (value: string) => value.normalize('NFD').replace(/[\u3099\u309a]/g, '');
         matches = catalog.filter(p => withoutVoicing(normalized) === withoutVoicing(normalize(p.name)));
+    }
+    if (!matches.length) {
+        const expanded = expandSmallKana(normalized);
+        matches = catalog.filter(p => expanded.includes(expandSmallKana(normalize(p.name))));
     }
     const longest = Math.max(0, ...matches.map(p => normalize(p.name).length));
     return matches.filter(p => normalize(p.name).length === longest);

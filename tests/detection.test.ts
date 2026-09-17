@@ -37,10 +37,17 @@ test('3本揃わない画像や目盛りの途中にある不確かな値は確�
     assert.equal(detectBars(appraisal([8.5, 3, 11])), null);
 });
 
-test('OCRの空白・濁点欠落を扱い、フォルム候補を1つに決めない', () => {
+test('OCRの空白・濁点・小書きカナを補正し、完全表記と複数候補を優先する', () => {
     assert.deepEqual(matchNames('テル ビル\n', catalog).map(p => p.id), ['houndour']);
     assert.deepEqual(matchNames('デルビル', catalog).map(p => p.id), ['houndour']);
+    assert.deepEqual(matchNames('ニヤ オハ 八', catalog).map(p => p.id), ['sprigatito']);
+    assert.deepEqual(matchNames('ニヤ ロー テ', catalog).map(p => p.id), ['floragato']);
     assert.ok(matchNames('ロコン', catalog).length >= 2);
+    const base = catalog[0];
+    const exactCatalog = [{ ...base, id: 'small', name: 'ニャオハ' }, { ...base, id: 'large', name: 'ニヤオハ' }];
+    assert.deepEqual(matchNames('ニヤオハ', exactCatalog).map(p => p.id), ['large']);
+    const collisionCatalog = [{ ...base, id: 'small-ya', name: 'ニャオハ' }, { ...base, id: 'small-o', name: 'ニヤォハ' }];
+    assert.deepEqual(matchNames('ニヤオハ', collisionCatalog).map(p => p.id), ['small-ya', 'small-o']);
     assert.deepEqual(matchNames('不明なニックネーム', catalog), []);
 });
 
