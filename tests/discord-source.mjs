@@ -11,7 +11,7 @@ const url = 'https://cdn.discordapp.com/attachments/123456789012345678/223456789
 const originalFetch = globalThis.fetch;
 globalThis.fetch = (input, options) => String(input) === url ? Promise.resolve(new Response(bytes)) : originalFetch(input, options);
 const wasm = await WebAssembly.compile(await readFile(new URL('../node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm', import.meta.url)));
-const language = await readFile(new URL('../public/ocr/jpn.traineddata.gz', import.meta.url));
+const language = await readFile(new URL('../dist/ocr/jpn.traineddata.gz', import.meta.url));
 const scan = createDiscordScanner(wasm, { fetch: async () => new Response(language) });
 try {
     const reply = await discordImageResult({

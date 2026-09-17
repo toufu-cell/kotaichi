@@ -1,80 +1,67 @@
-# 個体値スコープ
+# kotaichi
 
-ポケモンGOの評価画面から個体値を読み取り、PvP個体値順位を調べるアプリです。
-Discordに画像を送るだけで、そのポケモンと進化先の順位をまとめて確認できます。
-スマホ向けの[Webアプリ](https://kotaichi.iv-scope-lab.workers.dev)でも利用できます。
+Discordへ投稿されたポケモンGOの評価画像から、個体値とPvP順位を返すCloudflare Workers Botです。Discord Gatewayの接続状態と処理待ちデータをDurable Objectsで管理し、画像認識と順位計算をCloudflare上で実行します。
 
-## できること
+## 主な機能
 
-- 評価画像からポケモン名と、こうげき・ぼうぎょ・HPの個体値を読み取ります。
-- スーパー・ハイパー・リトル・マスターの4リーグの順位、CP、育成レベルを表示します。
-- 分岐進化を含め、進化先の順位を比較できます。
-- Discordでは複数の画像をまとめて送れます。画像ごとに番号を付けて返信します。
-- Discordでは上位1〜30位を星と太字で強調し、該当する進化候補を優先して表示します。
-- フォルムの判別が難しい画像では、通常・アローラなどの各候補の順位を表示します。
+- ポケモン名と、こうげき・ぼうぎょ・HPの個体値を画像から読み取ります。
+- PL50を上限として、スーパー・ハイパー・リトル・マスターの順位を計算します。
+- 進化先とフォルム候補を表示します。
+- 複数画像を順番に処理し、上位30位を星と太字で強調します。
+- 画像を1枚添付し、本文にポケモン名と`1/4/15`のような個体値を半角スペースで区切って書くと、その内容で計算します。
 
-## Discordで使う
+## セットアップ
 
-1. ポケモンGOの「ポケモンを調べてもらう」を開きます。
-2. ポケモン名と3本の評価バーが見えるスクリーンショットを撮ります。
-3. Botを導入したサーバーの専用チャンネルへ画像を送ります。
-4. 返信された個体値と、ポケモン・進化候補ごとの順位を確認します。
-
-育成レベルの上限はPL50です。
-画像はPNG・JPEG・WebPに対応し、1枚あたり8MB・800万画素まで送れます。
-読み取った名前と個体値は、元の画像と見比べてください。
-
-Botの導入方法や、本文で名前・個体値を指定する方法は[Discord Botのガイド](docs/discord-bot.md)にまとめています。
-
-## Webアプリで使う
-
-1. [個体値スコープ](https://kotaichi.iv-scope-lab.workers.dev)を開き、評価画像を選びます。
-2. 読み取ったポケモン・フォルムと個体値を確認します。手入力で修正できます。
-3. 管理者から受け取った利用コードを入力し、「順位を調べる」を押します。
-4. リーグと育成レベルの上限を切り替え、結果を比較します。
-
-育成レベルの上限はPL40・50・51から選べます。
-画像はPNG・JPEG・WebPに対応し、20MB・3,200万画素まで読み取れます。
-Webアプリの画像解析は端末内で行います。
-
-## 順位の見方
-
-同じポケモン・フォルムの個体値0〜15、全4,096通りを比較した順位です。
-それぞれの個体値について、CP制限と育成レベル上限の範囲で能力値が最大になるレベルを求めます。
-こうげき・ぼうぎょ・HPの積が大きい順に順位を付け、同率は同順位にします。
-
-| リーグ | CP上限 |
-| --- | --- |
-| スーパー | 1,500 |
-| ハイパー | 2,500 |
-| リトル | 500 |
-| マスター | 制限なし |
-
-進化先は候補として表示します。性別・地域・イベントなどの進化条件はゲーム内で確認してください。
-
-## データとライセンス
-
-種族値・進化関係・レベル補正には[PvPoke](https://github.com/pvpoke/pvpoke)のデータを使います。
-日本語名には[PokéAPI](https://pokeapi.co/)のデータを使います。
-データはアプリに同梱しており、出典と更新日時を記録しています。
-各データのライセンスは[public/licenses](public/licenses/)を参照してください。
-
-## 検証とデータ更新
-
-開発環境はNode.js 24以上です。
+Node.js 24を使用します。
 
 ```sh
 npm ci
-npm test
-npm run deploy:check
-```
-
-ポケモンのデータを更新する場合は、次のコマンドを実行します。
-
-```sh
-npm run data:update
-npm test
+npx wrangler login
+npx wrangler secret put APP_PASSWORD
+npx wrangler secret put DISCORD_BOT_TOKEN
+npx wrangler secret put DISCORD_CHANNEL_ID
 npm run deploy
 ```
+
+`APP_PASSWORD`には16文字以上の管理用パスワードを設定します。Botの作成、Message Content Intent、招待権限、管理CLIの手順は[Discord Bot運用ガイド](docs/discord-bot.md)を参照してください。
+
+管理CLIは`.dev.vars.production`から`APP_PASSWORD`を読み取ります。
+
+```dotenv
+APP_PASSWORD="16文字以上の管理用パスワード"
+```
+
+```sh
+npm run bot -- start
+npm run bot -- status
+npm run bot -- stop
+```
+
+公開先を変更する場合は、`APP_URL`にHTTPSのWorker URLを指定します。
+
+## 開発と検証
+
+```sh
+npm run build
+npm test
+npm run deploy:check
+npm run test:discord-source -- /absolute/path/to/purrloin-appraisal.png purrloin
+```
+
+画像テストには、個体値がこうげき1・ぼうぎょ4・HP15のチョロネコの評価画像を用意します。
+
+`build`は共有コードとBotコードの型を確認し、`dist/ocr/jpn.traineddata.gz`を生成します。`test:deployed`はBotの状態を変更せず、公開ルート、認証、状態応答を検証します。
+
+```sh
+APP_URL=https://example.workers.dev \
+APP_SECRET_FILE=.dev.vars.production \
+npm run test:deployed
+```
+
+ポケモンデータを更新する場合は、`npm run data:update`の後に上記のコマンドで確認します。
+
+## データとライセンス
+
+種族値・進化関係・レベル補正には[PvPoke](https://github.com/pvpoke/pvpoke)のデータを使います。日本語名には[PokéAPI](https://pokeapi.co/)のデータを使います。ライセンスは[public/licenses](public/licenses/)に収録しています。
 
 ポケモンGOの非公式ファンツールです。Pokémonおよび関連名称は各権利者に帰属します。

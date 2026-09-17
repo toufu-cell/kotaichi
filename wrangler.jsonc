@@ -16,12 +16,10 @@
         { "tag": "v1", "new_sqlite_classes": ["RankBrowser"] },
         { "tag": "v2", "new_sqlite_classes": ["DiscordGateway"] }
     ],
-    "vars": { "APP_ORIGIN": "https://kotaichi.iv-scope-lab.workers.dev" },
     "assets": {
         "directory": "./dist",
         "binding": "ASSETS",
-        "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"]
+        "run_worker_first": true
     },
     "observability": { "enabled": false }
 }

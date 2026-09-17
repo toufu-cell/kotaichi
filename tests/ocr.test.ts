@@ -40,7 +40,7 @@ test('Browserless OCR reads images, rejects uncertain input and recovers before 
         fixtures = Object.fromEntries(Object.entries(encoded).map(([name, value]) => [name, Buffer.from(value, 'base64')]));
     } finally { await browser.close(); }
     const wasm = await WebAssembly.compile(await readFile(new URL('../node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm', import.meta.url)));
-    const compressed = await readFile(new URL('../public/ocr/jpn.traineddata.gz', import.meta.url));
+    const compressed = await readFile(new URL('../dist/ocr/jpn.traineddata.gz', import.meta.url));
     const recognizer = await createImageRecognizer(wasm, async () => gunzipSync(compressed));
     const expected = { pokemonId: 'houndour', ivs: [8, 3, 11] };
     try {

@@ -4,14 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/prepare-ocr.mjs && vite --host 0.0.0.0 --port 4273 --strictPort",
-    "build": "node scripts/prepare-ocr.mjs && tsc --noEmit && tsc -p tsconfig.worker.json && vite build",
+    "build": "node scripts/prepare-ocr.mjs && tsc --noEmit && tsc -p tsconfig.worker.json",
     "dev:worker": "wrangler dev --ip 0.0.0.0 --port 4275",
     "deploy": "npm run build && wrangler deploy",
     "deploy:check": "npm run build && wrangler deploy --dry-run",
-    "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.ts",
-    "test:browser": "node tests/browser.mjs",
     "test:discord-source": "node tests/discord-source.mjs",
     "bot": "node scripts/bot.mjs",
     "test:deployed": "node tests/deployed.mjs",
@@ -19,7 +16,6 @@
     "postinstall": "node scripts/prepare-ocr.mjs"
   },
   "dependencies": {
-    "tesseract.js": "7.0.0",
     "tesseract.js-core": "7.0.0"
   },
   "devDependencies": {
@@ -27,7 +23,6 @@
     "@types/node": "^26.5.1",
     "playwright": "^1.63.0",
     "typescript": "~5.9.3",
-    "vite": "8.3.0",
     "wrangler": "^4.131.1"
   }
 }
