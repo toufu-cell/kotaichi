@@ -22,7 +22,7 @@ test('Browserless OCR reads images, rejects uncertain input and recovers before 
             canvas.width = 1206; canvas.height = 2605;
             const ctx = canvas.getContext('2d')!;
             ctx.scale(1.206, 1.206);
-            for (const name of ['デルビル', 'ロコン', 'キノココデルビル']) {
+            for (const name of ['デルビル', 'ロコン', 'カヌチャン', 'キノココデルビル']) {
                 ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1000, 2160);
                 ctx.fillStyle = '#426b6d'; ctx.font = '60px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(name, 500, 935);
                 ctx.fillStyle = '#71e7b0'; ctx.fillRect(250, 980, 500, 12);
@@ -48,6 +48,7 @@ test('Browserless OCR reads images, rejects uncertain input and recovers before 
     try {
         for (const format of ['png', 'jpeg', 'webp']) assert.deepEqual(await recognizer.recognize(fixtures[`デルビル-${format}`]), expected);
         assert.deepEqual(await recognizer.recognize(fixtures['ロコン-png']), { candidateIds: ['vulpix', 'vulpix_alolan'], ivs: [8, 3, 11] });
+        assert.deepEqual(await recognizer.recognize(fixtures['カヌチャン-png']), { pokemonId: 'tinkatink', ivs: [8, 3, 11] });
         for (const bytes of [Buffer.from('broken'), fixtures.oversize, fixtures['キノココデルビル-png']]) {
             await assert.rejects(recognizer.recognize(bytes), DiscordInputError);
             assert.deepEqual(await recognizer.recognize(fixtures['デルビル-png']), expected);

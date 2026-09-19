@@ -126,11 +126,10 @@ export async function createImageRecognizer(wasm: WebAssembly.Module, loadLangua
                 try {
                     if (api.Init('/', 'jpn', 1)) throw new Error('OCR initialization failed.');
                     initialized = true;
-                    api.SetPageSegMode(7);
                 } finally { core.FS.unlink('/jpn.traineddata'); }
             }
-            // Retry at native size only when enlarged text has no matching name.
-            for (const scale of [2, 1]) {
+            // Retry single-word segmentation at 2x only after both line attempts miss.
+            for (const [scale, mode] of [[2, 7], [1, 7], [2, 8]] as const) {
                 const width = rectangle.width * scale;
                 const height = rectangle.height * scale;
                 const crop = new Uint8Array(width * height * 4);
@@ -154,6 +153,7 @@ export async function createImageRecognizer(wasm: WebAssembly.Module, loadLangua
                 const pointer = core._malloc(crop.length);
                 try {
                     new Uint8Array(memory.buffer).set(crop, pointer);
+                    api.SetPageSegMode(mode);
                     api.SetImage(pointer, width, height, 4, width * 4);
                     api.SetSourceResolution(96);
                     if (api.Recognize(null)) throw new Error('OCR recognition failed.');
